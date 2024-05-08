@@ -5,32 +5,42 @@ from PySide2.QtGui import QColor, QPainter, QBrush
 
 class SwapMat():
     def __init__(self):
-        self.mesh = ""
+        self.mesh = set() # a set is a list that has unique elements.
         self.color = [0,0,0]
+        self.srcMesh = ""
     def UpdateMatColors(self, r, g, b):
         self.color[0] = r
         self.color[1] = g
         self.color[2] = b
-        mat = self.GetMaterialNameForGhost(self.mesh)
-        mc.setAttr(mat + ".color", self.color[0], self.color[1], self.color[2], type = "double3")
-    def AddMaterial(self):
-        selection = mc.ls(sl=True)[0]
-        matName = self.GetMaterialNameForGhost(self.mesh) # figure out the name for the material
+    def AddMaterial(self): 
+        for srcMesh in self.mesh:
+            ghostName = srcMesh 
+            self.srcMesh = ghostName
+        matName = self.GetMaterialNameForMesh(self.srcMesh) # figure out the name for the material
         if not mc.objExists(matName): # check if material not exist
             mc.shadingNode("lambert", asShader = True, name = matName) # create the lambert material if not exists
             
-        sgName = self.GetShadingEngineForMesh(self.mesh) # fiture out the name of the shading engine
+        sgName = self.GetShadingEngineForMesh() # fiture out the name of the shading engine
         if not mc.objExists(sgName): # check if the shading engine exists
             mc.sets(name = sgName, renderable = True, empty = True) # create the shading engine if not exists
 
         mc.connectAttr(matName + ".outColor", sgName + ".surfaceShader", force = True) # connet the material to the shading engine
-        mc.sets(self.mesh, edit=True, forceElement = sgName) # assign the material to ghost
+        mc.sets(self.srcMesh, edit=True, forceElement = sgName) # assign the material to ghost
 
         mc.setAttr(matName + ".color", self.color[0], self.color[1], self.color[2], type = "double3")
-    def GetMaterialNameForMesh(self):
-        return "Alex_Body_geo"
+    def GetMaterialNameForMesh(self, mesh):
+        return self.srcMesh  + "_mat"
     def GetShadingEngineForMesh(self):
-        return self.mesh + "_sg"
+        return self.srcMesh + "_sg"
+    def UpdateSelection(self):
+        selection = mc.ls(sl=True)
+        self.mesh.clear() # removes all elements in the set.
+        for selected in selection:
+            shapes = mc.listRelatives(selected, s=True) # find all shapes of the selected object
+            for s in shapes:
+                if mc.objectType(s) == "mesh": # the object is a mesh
+                    self.mesh.add(selected) # add the mesh to our set.
+
 
         
 
@@ -65,23 +75,28 @@ class GhostWidget(QWidget):
         self.masterLayout.addLayout(self.ctrlLayout)
 
         addGhostBtn = QPushButton("Add/Update")
-        addGhostBtn.clicked.connect(self.swapmat.AddMaterial)
+        addGhostBtn.clicked.connect(self.AddMaterialBtn)
         self.ctrlLayout.addWidget(addGhostBtn)
 
         self.materialLayout = QHBoxLayout()
         self.masterLayout.addLayout(self.materialLayout)
-        colorPicker = ColorPicker()
-        colorPicker.onColorChanged.connect(self.swapmat.UpdateMatColors)
-        self.materialLayout.addWidget(colorPicker)                     
+        self.colorPicker = ColorPicker()
+        self.colorPicker.onColorChanged.connect(self.UpdateColor)
+        self.materialLayout.addWidget(self.colorPicker)                     
 
     
 
    
 
-    def AddSrcMeshBtnClicked(self):
-        self.ghost.SetSelectedAsSrcMesh() # asks ghost to populate it's srcMeshes with the current selection
-        self.srcMeshList.clear() # this clears our list widget
-        self.srcMeshList.addItems(self.ghost.srcMeshes) # this add the srcMeshes collected eariler to the list widget
+    def AddMaterialBtn(self):
+        self.swapmat.UpdateSelection()
+        self.swapmat.AddMaterial()
+        
+    def UpdateColor(self, newColor: QColor):
+        r = newColor.redF()
+        g = newColor.greenF()
+        b = newColor.blueF()
+        self.swapmat.UpdateMatColors(r,g,b)
 
 ghostWidget = GhostWidget()
-ghostWidget.show()
+ghostWidget.show()   
